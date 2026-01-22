@@ -189,10 +189,35 @@ fn construct_response_page(path: &Path, received_path: &str) -> String {
             a { text-decoration: none; color: #007aff; }
             .dir a { font-weight: bold; }
             .size { color: #888; font-size: 0.9em; text-align: right; }
-        </style></head><body>"
+        </style>
+        <script>
+            function toggleDetails(id, isdisplay) {
+                var details = document.getElementsByClassName(id);
+                if (details.length > 0) {
+                    for (var i = 0; i < details.length; i++) {
+                        details[i].style.display = isdisplay === true ? 'flex' : 'none';
+                    }
+                }
+            }
+            function onchangehandler(event) {
+                var selectedValue = document.getElementById('sort-select').value;
+                if (selectedValue === 'all') {
+                    toggleDetails('file', true);
+                    toggleDetails('dir', true);
+                } else if (selectedValue === 'file') {
+                    toggleDetails('file', true);
+                    toggleDetails('dir', false);
+                } else if (selectedValue === 'dir') {
+                    toggleDetails('file',false);
+                    toggleDetails('dir', true);
+                }
+            }
+        </script>
+        <meta charset='UTF-8'>
+        </head><body>"
     );
 
-    page.push_str(&format!("<h1>Index of {}</h1><ul>", received_path));
+    page.push_str(&format!("<h1>Index of {} <select id='sort-select' onchange='onchangehandler()'><option value='all'>All</option><option value='file'>File</option><option value='dir'>Directory</option></select></h1><ul>", received_path));
 
     if received_path != "/" {
         let parent_path = Path::new(received_path).parent().unwrap_or(Path::new("/")).to_str().unwrap_or("/");
@@ -210,9 +235,9 @@ fn construct_response_page(path: &Path, received_path: &str) -> String {
         };
         let class = if file.isdir { "dir" } else { "file" };
         let size_info = if file.isdir {
-            "&lt;DIR&gt;".to_string()
+            "📂".to_string()
         } else {
-            format!("{} bytes", file.size)
+            format!("{}", file_size_formatter(file.size))
         };
 
         page.push_str(&format!(
@@ -223,6 +248,19 @@ fn construct_response_page(path: &Path, received_path: &str) -> String {
 
     page.push_str("</ul></body></html>");
     page
+}
+
+fn file_size_formatter(size: u64) -> String {
+    let units = ["B", "KB", "MB", "GB", "TB"];
+    let mut size = size as f64;
+    let mut unit_index = 0;
+
+    while size >= 1024.0 && unit_index < units.len() - 1 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+
+    format!("{:.2} {}", size, units[unit_index])
 }
 
 fn fetch_all_files(path: &Path) -> Result<Vec<File>, std::io::Error> {
@@ -301,7 +339,7 @@ fn main() -> std::io::Result<()> {
     let port = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(8123);
     let threads = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(4);
 
-    let address = format!("127.0.0.1:{}", port);
+    let address = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&address)?;
     let pool = thread_pool::ThreadPool::new(threads);
     let current_dir = Arc::new(env::current_dir()?);
